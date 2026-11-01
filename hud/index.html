@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JARVIS</title>
+<style>
+  :root {
+    --bg: #04070a;
+    --text: #9fb6c0;
+    --text-dim: #4c626d;
+    --user: #6fe3ff;
+    --jarvis: #ffb23e;
+    --mono: "Consolas", "SF Mono", "Menlo", "DejaVu Sans Mono", monospace;
+    --ease: cubic-bezier(.2, .8, .2, 1);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+  }
+
+  #scene {
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(circle at 50% 46%, rgba(20,60,80,0.10), transparent 55%),
+      radial-gradient(circle at 50% 120%, rgba(10,30,45,0.25), transparent 60%),
+      var(--bg);
+  }
+
+  #reactor {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(72vmin, 640px);
+    height: min(72vmin, 640px);
+  }
+
+  /* status panel top-left */
+  .status {
+    position: fixed;
+    top: 34px; left: 40px;
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    line-height: 2.1;
+    color: var(--text-dim);
+    user-select: none;
+  }
+  .status .row { display: flex; gap: 12px; align-items: center; }
+  .status .key { width: 74px; color: var(--text-dim); }
+  .status .val { color: var(--text); }
+  .status .val.active { color: var(--user); text-shadow: 0 0 10px rgba(111,227,255,0.5); }
+
+  .dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #d24b4b;
+    box-shadow: 0 0 8px #d24b4b;
+  }
+  .dot.online { background: #52e0a0; box-shadow: 0 0 8px #52e0a0; }
+
+  /* clock top-right */
+  .clock {
+    position: fixed;
+    top: 30px; right: 42px;
+    text-align: right;
+    user-select: none;
+  }
+  .clock .time {
+    font-size: 30px;
+    letter-spacing: 6px;
+    color: var(--text);
+    text-shadow: 0 0 14px rgba(120,180,200,0.25);
+  }
+  .clock .date {
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-top: 6px;
+  }
+
+  /* state label below reactor */
+  .state-label {
+    position: fixed;
+    left: 50%;
+    top: calc(50% + min(38vmin, 340px));
+    transform: translate(-50%, -50%);
+    font-size: 13px;
+    letter-spacing: 8px;
+    text-transform: uppercase;
+    color: var(--user);
+    text-shadow: 0 0 16px currentColor;
+    user-select: none;
+  }
+
+  /* conversation feed bottom */
+  .feed {
+    position: fixed;
+    left: 50%;
+    bottom: 26px;
+    transform: translateX(-50%);
+    width: min(760px, 84vw);
+    max-height: 210px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 8px;
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(180deg, transparent, #000 34%);
+            mask-image: linear-gradient(180deg, transparent, #000 34%);
+  }
+  .line {
+    font-size: 13.5px;
+    letter-spacing: 0.4px;
+    line-height: 1.4;
+    opacity: 0;
+    transform: translateY(6px);
+    animation: enter 0.35s ease forwards;
+  }
+  @keyframes enter { to { opacity: 1; transform: none; } }
+
+  .line .who {
+    font-size: 9.5px;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    display: block;
+    margin-bottom: 1px;
+  }
+  .line.user { text-align: left; color: var(--user); }
+  .line.user .who { color: rgba(111,227,255,0.55); }
+  .line.jarvis { text-align: right; color: var(--jarvis); }
+  .line.jarvis .who { color: rgba(255,178,62,0.55); }
+
+  /* HUD corner brackets */
+  .corner {
+    position: fixed;
+    width: 26px; height: 26px;
+    border: 2px solid rgba(120,160,180,0.35);
+    pointer-events: none;
+  }
+  .corner.tl { top: 20px; left: 22px; border-right: none; border-bottom: none; }
+  .corner.tr { top: 20px; right: 22px; border-left: none; border-bottom: none; }
+  .corner.bl { bottom: 20px; left: 22px; border-right: none; border-top: none; }
+  .corner.br { bottom: 20px; right: 22px; border-left: none; border-top: none; }
+</style>
+</head>
+<body>
+  <div id="scene"></div>
+
+  <!-- arc reactor SVG -->
+  <svg id="reactor" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#6fe3ff" stop-opacity="0.35"/>
+        <stop offset="100%" stop-color="#6fe3ff" stop-opacity="0"/>
+      </radialGradient>
+      <filter id="blur"><feGaussianBlur stdDeviation="3"/></filter>
+    </defs>
+    <!-- outer glow -->
+    <circle cx="200" cy="200" r="190" fill="url(#glow)"/>
+    <!-- rings -->
+    <circle cx="200" cy="200" r="185" fill="none" stroke="rgba(111,227,255,0.08)" stroke-width="1"/>
+    <circle cx="200" cy="200" r="170" fill="none" stroke="rgba(111,227,255,0.12)" stroke-width="1.5"/>
+    <circle cx="200" cy="200" r="150" fill="none" stroke="rgba(111,227,255,0.18)" stroke-width="1.5"/>
+    <!-- arc segments -->
+    <g stroke="rgba(111,227,255,0.4)" stroke-width="2" fill="none">
+      <path d="M200,50 A150,150 0 0,1 330,125"/>
+      <path d="M330,125 A150,150 0 0,1 330,275"/>
+      <path d="M330,275 A150,150 0 0,1 200,350"/>
+      <path d="M200,350 A150,150 0 0,1 70,275"/>
+      <path d="M70,275 A150,150 0 0,1 70,125"/>
+      <path d="M70,125 A150,150 0 0,1 200,50"/>
+    </g>
+    <!-- inner hexagon -->
+    <polygon points="200,120 269,160 269,240 200,280 131,240 131,160"
+      fill="none" stroke="rgba(111,227,255,0.3)" stroke-width="2"/>
+    <!-- spokes -->
+    <g stroke="rgba(111,227,255,0.2)" stroke-width="1.5">
+      <line x1="200" y1="120" x2="200" y2="60"/>
+      <line x1="269" y1="160" x2="320" y2="130"/>
+      <line x1="269" y1="240" x2="320" y2="270"/>
+      <line x1="200" y1="280" x2="200" y2="340"/>
+      <line x1="131" y1="240" x2="80" y2="270"/>
+      <line x1="131" y1="160" x2="80" y2="130"/>
+    </g>
+    <!-- inner glow core -->
+    <circle cx="200" cy="200" r="55" fill="rgba(111,227,255,0.05)" stroke="rgba(111,227,255,0.4)" stroke-width="2"/>
+    <circle cx="200" cy="200" r="35" fill="rgba(111,227,255,0.12)" filter="url(#blur)"/>
+    <circle cx="200" cy="200" r="22" fill="rgba(111,227,255,0.6)" filter="url(#blur)"/>
+    <circle cx="200" cy="200" r="10" fill="#6fe3ff"/>
+    <!-- rotating ring (animated) -->
+    <circle cx="200" cy="200" r="120" fill="none"
+      stroke="rgba(111,227,255,0.25)" stroke-width="1.5"
+      stroke-dasharray="8 16">
+      <animateTransform attributeName="transform" type="rotate"
+        from="0 200 200" to="360 200 200" dur="12s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="200" cy="200" r="100" fill="none"
+      stroke="rgba(111,227,255,0.15)" stroke-width="1"
+      stroke-dasharray="4 20">
+      <animateTransform attributeName="transform" type="rotate"
+        from="360 200 200" to="0 200 200" dur="20s" repeatCount="indefinite"/>
+    </circle>
+  </svg>
+
+  <div class="state-label" id="stateLabel">STANDBY</div>
+
+  <div class="status">
+    <div class="row">
+      <span class="key">System</span>
+      <span class="val"><span class="dot" id="dot"></span> <span id="sSystem">Offline</span></span>
+    </div>
+    <div class="row">
+      <span class="key">Mode</span>
+      <span class="val" id="sMode">—</span>
+    </div>
+    <div class="row">
+      <span class="key">Mic</span>
+      <span class="val" id="sMic">—</span>
+    </div>
+    <div class="row">
+      <span class="key">Tool</span>
+      <span class="val" id="sTool">—</span>
+    </div>
+  </div>
+
+  <div class="clock">
+    <div class="time" id="clockTime">--:--:--</div>
+    <div class="date" id="clockDate">—</div>
+  </div>
+
+  <div class="feed" id="feed"></div>
+
+  <div class="corner tl"></div>
+  <div class="corner tr"></div>
+  <div class="corner bl"></div>
+  <div class="corner br"></div>
+
+<script>
+"use strict";
+
+// clock
+function tick() {
+  const now = new Date();
+  document.getElementById("clockTime").textContent =
+    now.toLocaleTimeString("en-US", {hour12: false});
+  document.getElementById("clockDate").textContent =
+    now.toLocaleDateString("en-US", {weekday:"short", month:"short", day:"numeric"}).toUpperCase();
+}
+tick();
+setInterval(tick, 1000);
+
+// SSE feed
+const feed = document.getElementById("feed");
+const label = document.getElementById("stateLabel");
+const dot = document.getElementById("dot");
+const sSystem = document.getElementById("sSystem");
+const sMic = document.getElementById("sMic");
+
+function appendLine(role, text) {
+  const el = document.createElement("div");
+  el.className = `line ${role}`;
+  el.innerHTML = `<span class="who">${role === "user" ? "You" : "Jarvis"}</span>${text}`;
+  feed.appendChild(el);
+  // keep last 20 lines
+  while (feed.children.length > 20) feed.removeChild(feed.firstChild);
+}
+
+const es = new EventSource("/events");
+es.onopen = () => {
+  dot.classList.add("online");
+  sSystem.textContent = "Online";
+  label.textContent = "LISTENING";
+};
+es.onerror = () => {
+  dot.classList.remove("online");
+  sSystem.textContent = "Offline";
+  label.textContent = "STANDBY";
+  setTimeout(() => location.reload(), 3000);
+};
+es.onmessage = (e) => {
+  const {role, text, state} = JSON.parse(e.data);
+  if (state) {
+    label.textContent = state.toUpperCase();
+    sMic.textContent = state;
+    return;
+  }
+  if (role && text) appendLine(role, text);
+};
+</script>
+</body>
+</html>

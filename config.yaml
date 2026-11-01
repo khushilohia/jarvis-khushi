@@ -1,0 +1,8 @@
+llm: claude_code
+tts:
+  voice: Samantha
+  rate: 220
+whisper:
+  model: small
+hud:
+  port: 7777
